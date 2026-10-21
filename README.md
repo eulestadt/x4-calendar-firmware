@@ -4,6 +4,112 @@ This is [TRMNL firmware 1.8.17](https://github.com/usetrmnl/trmnl-firmware/relea
 
 The original project is GPL-3. This copy keeps that license. The nap change is in `src/x4_sleep.cpp`.
 
+## **Power consumption**
+
+A bit of background first, because the pretty graph in the original TRMNL notes is worth understanding before we talk about why the X4 does not get to live in it.
+
+The ESP32-C3 is a very good little chip at being asleep. Espressif designed it so that, when your project has nothing to do, the processor can forget its working memory and drop to a few microamps. On a TRMNL OG, the practical number is higher than that theoretical floor, because the device still has to notice a button press. Keeping one GPIO awake for that button costs about 100 µA. The capture below is that nap. The line sits in a band around a hundred microamps, and the little box in the corner even adds up the charge for you.
+
+![What a healthy ESP32-C3 nap looks like, from the original TRMNL notes](/pics/deep-sleep-power-consumption.png)
+
+A hundred microamps is a very small drink. Their writeup does the next step the right way: a 2500 mAh battery divided by 0.1 mA is on the order of 25,000 hours, which is years, and then they immediately remind you that a device which only sleeps is not a useful device. The second picture is the one that actually matches a day of use. The chip wakes, Wi-Fi comes up, and for several seconds the current is up in the tens or hundreds of milliamps. Then the e-paper display does its shuffle, which looks busy and costs surprisingly little. They measured one of those visits at 0.67 coulomb, which is 0.186 mAh. Almost all of it is the Wi-Fi.
+
+![One TRMNL update, from the original notes. The tall part is Wi-Fi. The grass at the end is the screen.](/pics/full-cycle.png)
+
+That shape is the whole story of a battery calendar. There is a short, expensive minute, and a long, quiet hour. Whichever of those two you leave messy is the one that empties the cell.
+
+The X4 has the same kind of chip, and a much less convenient board around it.
+
+To wake on a timer, the chip has to keep its clock. On this board the clock does not have its own private supply. The battery is connected through a latch, a small MOSFET, and GPIO13 is what holds that latch shut. Hold the pin, and the whole 3.3 V rail stays up, so the clock survives and the reader can wake itself an hour later. Let the pin go, and the rail collapses. The clock dies with it. After that, only the power button or a USB cable can bring the reader back. We did not want that. The hourly calendar visit is the whole point. So GPIO13 stays held, on purpose, and the rail stays on.
+
+```mermaid
+flowchart TB
+  cell["650 mAh cell<br/>about 3.7 V"] --> latch["Battery latch<br/>GPIO13 held, not driven"]
+  latch --> rail["3.3 V rail<br/>stays on so the clock survives"]
+  rail --> esp["ESP32-C3"]
+  rail --> panel["E-ink panel"]
+  rail --> card["microSD card<br/>no power switch of its own"]
+  rail --> divider["Two 10 kΩ resistors<br/>always across the cell"]
+```
+
+Once that rail is on, everything hanging off it is invited to the party. Stock 1.8.17 put the processor into deep sleep and held GPIO13, and then stopped. The other guests were never asked to sit down.
+
+The e-ink controller is the first of them. Its sleep is real, but only while its reset pin stays high. If reset floats, the controller treats that as a wake-up and sits there drawing about 1 to 2 mA, which is a thousand times the nap in the picture above. The firmware already tells the panel to sleep before the chip sleeps. What it did not do was keep reset from drifting afterward. This build holds reset high, and it is careful not to send the sleep command a second time. Sending it again begins with a reset pulse, which would wake the panel we just put to bed.
+
+The microSD card is the second. It is powered straight from the rail. There is no switch to turn it off. TRMNL never mounts the card, but a card that was powered up and then left with its chip-select pin floating can sit selected and draw 1 to 5 mA for the rest of the hour. Before sleep we talk to the card in the simplest possible way, ask it to go idle if it answers, and then hold chip-select high so it is no longer invited.
+
+The third guest is sneakier. A few pins are not high and not low. The battery-measuring pin, GPIO0, sits in the middle of two 10 kΩ resistors, so it rests near half the cell voltage. The USB-detect pin rests near a volt. A digital input that is held in the middle does not read as a clean 1 or a clean 0. Its input buffer lingers in between, and a buffer in between can burn milliamps while looking like it is doing nothing. We park those pins. The buffer goes off, the pull resistors go away, and the pin is allowed to float. The button ladders get the same treatment. GPIO13 is not in that list. Letting go of the latch would be the opposite of what we want.
+
+```mermaid
+flowchart LR
+  subgraph before [Stock timed sleep]
+    direction TB
+    b1["Panel reset can float<br/>about 1–2 mA"]
+    b2["Card select can float<br/>about 1–5 mA"]
+    b3["Halfway pins<br/>buffers left partly on"]
+    b4["Processor asleep<br/>rail still on<br/>about 3–4 mA"]
+  end
+  subgraph after [This build]
+    direction TB
+    a1["Reset held high<br/>panel stays asleep"]
+    a2["Card select held high<br/>card left alone"]
+    a3["Halfway pins let go"]
+    a4["Processor still asleep<br/>rail still on, on purpose"]
+    a5["The two resistors still sip<br/>about 185 µA"]
+  end
+```
+
+Now the arithmetic, done the same way as the original notes, with the same honesty about what is a measurement and what is a sketch.
+
+The 1.8.17 source itself describes X4 timed sleep as about 3 to 4 mA. Take the middle of that range, 3.5 mA, and pretend the reader only sleeps.
+
+3.5 mA × 24 hours = 84 mAh per day
+
+650 / 84 ≈ 8 days
+
+That is the cheerful version. It is the same kind of number as the 25,000 hours in the original notes: true only if nothing else is drawing, and if the battery really gives you every milliamp-hour on the label. It is already much worse than the OG picture, because 3.5 mA is about thirty-five times 100 µA, and the cell is 650 mAh rather than 2500.
+
+Real boards were often worse than 3.5 mA, because the panel and the card were still awake on top of that. Add a couple of milliamps for a floating reset and a couple more for a card that never got told to sit down, and 8 mA is an easy place to land.
+
+8 mA × 24 hours = 192 mAh per day
+
+650 / 192 ≈ 3 days
+
+Then add the visits. This calendar wakes once an hour, which is 24 times a day. We do not have a coulomb counter capture of an X4 visit the way the original notes have 0.67 C for a TRMNL visit. The shape is the same one you can see in the picture above: Wi-Fi is the expensive part, the screen shuffle is the cheap part. A reasonable allowance for those 24 visits is about 15 to 20 mAh a day, something under 1 mAh each. Stack that on a sleepy-but-not-really-asleep rail and a full cell is gone in about two days. That matches what the reader actually felt like.
+
+There is also a floor we cannot software our way under. The two 10 kΩ resistors that measure the battery are connected from the cell to ground whenever the latch is held. They are not switched.
+
+3.7 V / 20,000 Ω = 0.000185 A = 185 µA
+
+185 µA × 24 hours ≈ 4.4 mAh per day
+
+Those two resistors, doing nothing but letting the chip glance at the battery, already drink more than the entire TRMNL OG does in its hundred-microamp nap. Hibernation on the ESP32-C3 can be a few microamps. This board cannot reach that while the timer wake holds the latch shut. A few hundred microamps, not a few, is the honest sleep current after the fix.
+
+Call the nap 400 µA once the panel, the card, and the halfway pins are tucked in. That is a sketch, not a meter reading on this cell.
+
+400 µA × 24 hours = 9.6 mAh per day, asleep
+
+About 18 mAh per day for the hourly visits
+
+9.6 + 18 ≈ 28 mAh per day
+
+650 / 28 ≈ 23 days
+
+Move the nap up toward 800 µA, or the visits toward the high end of that allowance, and you land nearer 16 days. So the band we actually believe is about two to three weeks. If a particular card refuses to idle and keeps a milliamp for itself, life slides back toward ten days. None of those figures replace a measurement. They are the same kind of back-of-the-envelope the original notes use before they say, correctly, that the real world comes in a little shorter.
+
+```mermaid
+flowchart LR
+  wake["Timer wakes the chip"] --> wifi["Wi-Fi<br/>the expensive minute"]
+  wifi --> draw["Today is drawn"]
+  draw --> tuck["Panel, card, and halfway pins tucked in"]
+  tuck --> nap["Nap for the rest of the hour<br/>rail still on, clock still alive"]
+  nap --> wake
+```
+
+On the next boot we let go of every pin we held, except GPIO13, and we do it before the screen's SPI bus is started. A pin that is still frozen from the nap would look exactly like a broken display. The latch stays held so the clock is not dropped on the way through the door.
+
+The other X4 build, the one that wakes only from the power button, is untouched. That one drives GPIO13 low and shuts the rail off. It is a different product. This one is the reader that comes back by itself.
+
 ## The short version
 
 The old sleep was a light nap. The screen and a few other parts stayed a little bit awake, like a flashlight left on very dim. A full battery lasted about two days.
