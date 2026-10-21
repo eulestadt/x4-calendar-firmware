@@ -1,3 +1,44 @@
+# The reader takes a real nap
+
+This is [TRMNL firmware 1.8.17](https://github.com/usetrmnl/trmnl-firmware/releases/tag/v1.8.17) for the Xteink X4, plus one change: between hourly calendar updates, the board sleeps much more deeply. Wi-Fi, the custom server address, and the once-an-hour wake stay as they were.
+
+The original project is GPL-3. This copy keeps that license. The nap change is in `src/x4_sleep.cpp`.
+
+## The short version
+
+The old sleep was a light nap. The screen and a few other parts stayed a little bit awake, like a flashlight left on very dim. A full battery lasted about two days.
+
+This version tells those parts to sleep too.
+
+- The screen is told to rest, and its reset pin is held so it cannot pop back awake.
+- The memory card is told to sit quietly, then its select pin is held off.
+- Pins that were stuck halfway on are let go, so they stop leaking power.
+
+The reader still wakes up by itself, draws today, and naps again. A full battery should last about two to three weeks.
+
+It cannot sleep as deeply as a watch. One small circuit has to stay on so the reader remembers when to wake. That circuit sips a little power the whole time.
+
+Flashing this does not forget Wi-Fi if the erase box is left empty.
+
+## How the nap works
+
+The X4 is an ESP32-C3 with a 650 mAh cell. In stock 1.8.17 timed sleep, the chip holds GPIO13 high. That keeps a MOSFET (the battery latch) on, so the 3.3 V rail and the RTC stay powered and the timer can wake the chip. Sleep current in that state is about 3–4 mA. With an hourly Wi-Fi refresh, the cell is empty in about two days.
+
+Cutting GPIO13 would drop the current much further, and it would also kill the RTC. Only the power button or USB could wake the board. This build does not do that. GPIO13 is held, not driven.
+
+The extra milliamps came from parts left in an active state:
+
+- The e-ink controller (SSD1677) draws about 1–2 mA if reset is floating, because it wakes up. Reset is held high after the panel's existing sleep command. A second sleep command is not sent: that command starts with a reset pulse and would wake the panel again.
+- The microSD card has no power switch. If its chip-select floats, the card can draw 1–5 mA. The firmware never mounts the card. Before sleep it sends the card's idle commands when a card answers, then holds chip-select high.
+- GPIO0 sits on a 10 kΩ + 10 kΩ battery divider, near half the cell voltage. GPIO20 sits near 1 V from USB detection. A pin in that middle range turns the input buffer partly on and can waste milliamps. Those pins, the button ladders, and other unused pins are parked: input buffer off, no pull, floating.
+- The divider itself cannot be switched off. At 3.7 V across 20 kΩ it draws about 185 µA whenever the latch is on. That is the floor. ESP32-C3 hibernation is a few microamps, but this board cannot reach it while the timer wake keeps the latch closed.
+
+So asleep, this build should sit at a few hundred microamps, not a few milliamps, and not a few microamps. On a 650 mAh cell, with the hourly Wi-Fi still costing about 15–20 mAh a day, a reasonable expectation is two to three weeks. That is an estimate, not a meter reading on this cell. A stubborn SD card can pull it back toward ten days.
+
+On the next boot, the held pins are released before SPI starts. GPIO13 stays held so the latch does not drop. The button-only build, which drives GPIO13 low and powers the board off, is unchanged.
+
+## Original TRMNL readme
+
 # TRMNL Firmware
 
 created for the [TRMNL](https://trmnl.com) e-ink display.

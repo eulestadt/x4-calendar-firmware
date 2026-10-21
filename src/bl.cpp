@@ -12,6 +12,7 @@
 #include <ArduinoLog.h>
 #include <WifiCaptive.h>
 #include <pins.h>
+#include <x4_sleep.h>
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
 #include <display.h>
@@ -326,6 +327,7 @@ static void showLastImageAndSleep()
       DisplayedImage::remember(curPath.c_str());
     }
   }
+  display_sleep();
   goToSleep();
 }
 
@@ -432,6 +434,7 @@ static void show_cached_image_by_offset(int offset) {
     if (buffer && file_size > 0) {
       display_show_image(buffer, file_size, true);
       DisplayedImage::remember(path.c_str());
+      display_sleep();
       goToSleep();
     }
     return;
@@ -477,6 +480,7 @@ static void show_cached_image_by_offset(int offset) {
   preferences.putString(PREFERENCES_BROWSE_PATH_KEY, String(images[new_idx]));
   display_show_image(buffer, file_size, true);
   DisplayedImage::remember(images[new_idx]);
+  display_sleep();
   goToSleep();
 }
 
@@ -2310,15 +2314,15 @@ void goToSleep(void)
 #else
 #error "Unsupported ESP32 target for GPIO wakeup configuration"
 #endif
-#if defined( BOARD_XTEINK_X4 ) || defined ( BOARD_XTEINK_X3 ) 
-// The Xteink X4 has a high current draw in deep sleep (3-4mA), so allow the user to select
-// if they want to completely shut down the power and only update with a physical button press
-// or have short battery life (5-7 days) in the normal TRMNL wakeup mode
+#if defined(BOARD_XTEINK_X4) && !defined(X4_WAKE_ON_BUTTON)
+  // Same timed wake as 1.8.17, with the panel, SD card, and ADC pins parked first.
+  x4_prepare_timed_sleep();
+#elif defined(BOARD_XTEINK_X4) || defined(BOARD_XTEINK_X3)
 #ifdef X4_WAKE_ON_BUTTON
   pinMode(13, OUTPUT);
   digitalWrite(13, 0); // cut off the battery power
   delay(100); // allow it to settle before going into power-off
-#else // Keep the battery power on and allow timed wakeup
+#else
   gpio_hold_en(GPIO_NUM_13); // MOSFET enabling the battery power
   gpio_deep_sleep_hold_en(); // Needed to keep the battery power enabled during RTC sleep
 #endif
