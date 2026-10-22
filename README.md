@@ -1,8 +1,20 @@
-# Lower sleep current for the Xteink X4
+# Daily calendar firmware for the Xteink X4
 
-This is [TRMNL firmware 1.8.17](https://github.com/usetrmnl/trmnl-firmware/releases/tag/v1.8.17) for the Xteink X4, plus one change: between hourly calendar updates, sleep current is lower. Wi-Fi, the custom server address, and the once-an-hour wake stay as they were.
+This is [TRMNL firmware 1.8.17](https://github.com/usetrmnl/trmnl-firmware/releases/tag/v1.8.17) for the Xteink X4, with two changes.
 
-The original project is GPL-3. This copy keeps that license. The sleep change is in `src/x4_sleep.cpp`.
+The sleep current between hourly updates is lower. That part is the same change as [x4-longer-sleep](https://github.com/eulestadt/x4-longer-sleep), and the notes below explain it.
+
+The X4 build also uses the daily calendar website when no server address has been saved:
+
+`https://x4-daily-calendar-production.up.railway.app`
+
+After Wi-Fi, the reader calls that website by itself. You do not open Advanced settings, and you do not type a server address. The website gives the reader a short code. Sign in with the Google account that owns the calendar, and press the button for that same code. One website can serve many readers. Each reader stays tied to the Google account that claimed its code.
+
+Leave the Erase box empty when you flash. Empty keeps the Wi-Fi network and any server address already saved on the reader. A reader that already reaches its server keeps doing that. This build uses the calendar website only when the reader has no saved server address.
+
+Advanced settings are still on the Wi-Fi page for a different server, a fixed IP address, or a reset. Leave the server field empty unless you run your own server.
+
+The original project is GPL-3. This copy keeps that license. Sleep code is in `src/x4_sleep.cpp`. The calendar address is the `API_BASE_URL` flag on the `xteink_x4` build.
 
 ## **Power consumption**
 

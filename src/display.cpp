@@ -2637,7 +2637,11 @@ void display_show_msg(uint8_t *image_buffer, MSG message_type, String friendly_i
     case FRIENDLY_ID:
     {
         Log_info("friendly id case");
+#if defined(CALENDAR_SERVER)
+        const char string1[] = API_BASE_URL;
+#else
         const char string1[] = "Please visit trmnl.com/start";
+#endif
         bbep.getStringBox(string1, &rect);
 #ifdef __BB_EPAPER__
         bbep.setCursor((bbep.width() - rect.w)/2, 400);
@@ -2646,12 +2650,20 @@ void display_show_msg(uint8_t *image_buffer, MSG message_type, String friendly_i
 #endif
         bbep.println(string1);
 
+#if defined(CALENDAR_SERVER)
+        String string2 = "Your code is ";
+        if (id)
+        {
+            string2 += friendly_id;
+        }
+#else
         String string2 = "with Friendly ID ";
         if (id)
         {
             string2 += friendly_id;
         }
         string2 += " to finish setup";
+#endif
         bbep.getStringBox(string2, &rect);
         bbep.setCursor((bbep.width() - rect.w)/2, -1);
         bbep.print(string2);
@@ -2675,14 +2687,20 @@ void display_show_msg(uint8_t *image_buffer, MSG message_type, String friendly_i
         bbep.setCursor((bbep.width() - rect.w) / 2, bbep.height() - 100 - rect.h);
 #endif
         bbep.println(string2);
+#if defined(CALENDAR_SERVER)
+        const char string3[] = "A page opens. Pick your home Wi-Fi.";
+#else
         const char string3[] = "or scan the QR code for help";
+#endif
         bbep.getStringBox(string3, &rect);
         bbep.setCursor((bbep.width() - rect.w) / 2, -1);
         bbep.print(string3);
+#if !defined(CALENDAR_SERVER)
 #ifdef __BB_EPAPER__
         bbep.loadG5Image(wifi_connect_qr, bbep.width() - 40 - 66, 40, BBEP_WHITE, BBEP_BLACK); // 66x66 QR code
 #else // bigger for X
         bbep.loadG5Image(wifi_connect_qr, bbep.width() - (66*2) - 80, 80, BBEP_WHITE, BBEP_BLACK, 2.0f);
+#endif
 #endif
     }
     break;
