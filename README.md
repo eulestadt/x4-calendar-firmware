@@ -10,6 +10,8 @@ The X4 build also uses the daily calendar website when no server address has bee
 
 After Wi-Fi, the reader calls that website by itself. You do not open Advanced settings, and you do not type a server address. The website gives the reader a short code. Sign in with the Google account that owns the calendar, and press the button for that same code. One website can serve many readers. Each reader stays tied to the Google account that claimed its code.
 
+If a later wake cannot join Wi-Fi, the picture already on the screen stays. The reader tries again later. Before any day or setup code has been drawn, a failed connection still shows the connection message.
+
 Leave the Erase box empty when you flash. Empty keeps the Wi-Fi network and any server address already saved on the reader. A reader that already reaches its server keeps doing that. This build uses the calendar website only when the reader has no saved server address.
 
 Advanced settings are still on the Wi-Fi page for a different server, a fixed IP address, or a reset. Leave the server field empty unless you run your own server.

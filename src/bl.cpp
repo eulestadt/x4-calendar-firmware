@@ -70,6 +70,7 @@ static void writeSpecialFunction(SPECIAL_FUNCTION function);
 void showMessageWithLogo(MSG message_type);
 static void showMessageWithLogo(MSG message_type, String friendly_id, bool id, const char *fw_version, String message);
 static void showMessageWithLogo(MSG message_type, const ApiSetupResponse &apiResponse);
+static bool keepExistingScreen();
 static void wifiErrorDeepSleep();
 static uint8_t *storedLogoOrDefault(int iType);
 static DeviceStatusStamp getDeviceStatusStamp();
@@ -1042,10 +1043,14 @@ void bl_init(void)
     }
     else
     {
-      if (should_show_error_now)
+      if (should_show_error_now && !keepExistingScreen())
       {
         showMessageWithLogo(WIFI_FAILED);
         current_msg = WIFI_FAILED;
+      }
+      else if (keepExistingScreen())
+      {
+        Log_info("WiFi unavailable; leaving the current screen in place");
       }
 
       Log_fatal_submit("Connection failed! WL Status: %d", WiFi.status());
@@ -2603,6 +2608,14 @@ static uint8_t *storedLogoOrDefault(int iType)
 
 // Chop up long names to fit within the SPIFFS 31 character limit
 
+// The panel keeps its last picture with no power. Once a day or a setup code
+// has been drawn, a wake that cannot join Wi-Fi must not paint over it.
+static bool keepExistingScreen()
+{
+  return DisplayedImage::exists()
+      || preferences.isKey(PREFERENCES_CURRENT_PATH_KEY)
+      || preferences.isKey(PREFERENCES_FRIENDLY_ID);
+}
 
 static void wifiErrorDeepSleep()
 {
@@ -2619,7 +2632,14 @@ static void wifiErrorDeepSleep()
 
   if (retry_count >= MAX_QUIET_SLOW_RETRIES) {
     preferences.putInt(PREFERENCES_CONNECT_WIFI_RETRY_COUNT, 1);
-    showMessageWithLogo(WIFI_FAILED);
+    if (keepExistingScreen())
+    {
+      Log_info("WiFi still unavailable; leaving the current screen in place");
+    }
+    else
+    {
+      showMessageWithLogo(WIFI_FAILED);
+    }
     display_sleep();
     goToSleep();
     return;
