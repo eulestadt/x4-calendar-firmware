@@ -936,16 +936,24 @@ void bl_init(void)
       showMessageWithLogo(NONE);
     }
 #else
-    display_show_image(storedLogoOrDefault(1), DEFAULT_IMAGE_SIZE, false, true);
+    // A non-timer wake used to paint the blank loading screen over a day that
+    // was already showing, then force another download. The power button can
+    // cause that wake by itself.
+    if (keepExistingScreen()) {
+      Log_info("Wake was not the timer; leaving the current screen in place");
+    } else {
+      display_show_image(storedLogoOrDefault(1), DEFAULT_IMAGE_SIZE, false, true);
+    }
 #endif // BOARD_TRMNL_X
     // Force the display to show the current playlist image after the loading screen
     // (even if it hasn't changed)
-    DisplayedImage::clear();
-
-    need_to_refresh_display = 1;
-    preferences.putBool(PREFERENCES_DEVICE_REGISTERED_KEY, false);
+    if (!keepExistingScreen()) {
+      DisplayedImage::clear();
+      need_to_refresh_display = 1;
+      preferences.putBool(PREFERENCES_DEVICE_REGISTERED_KEY, false);
+      preferences.putString(PREFERENCES_FILENAME_KEY, "");
+    }
     Log.info("%s [%d]: Display TRMNL logo end\r\n", __FILE__, __LINE__);
-    preferences.putString(PREFERENCES_FILENAME_KEY, "");
   }
   Log_info("Firmware version %s", Messages::firmware_version().c_str());
   Log_info("Arduino version %d.%d.%d", ESP_ARDUINO_VERSION_MAJOR, ESP_ARDUINO_VERSION_MINOR, ESP_ARDUINO_VERSION_PATCH);
@@ -1316,7 +1324,11 @@ void bl_init(void)
   break;
   case HTTPS_TIMED_OUT:
   {
-    showMessageWithLogo(WIFI_IMAGE_TIMEOUT);
+    if (keepExistingScreen()) {
+      Log_info("Image download timed out; leaving the current screen in place");
+    } else {
+      showMessageWithLogo(WIFI_IMAGE_TIMEOUT);
+    }
   }
   break;
   case HTTPS_PLUGIN_NOT_ATTACHED:
@@ -2322,6 +2334,17 @@ void goToSleep(void)
 #if defined(BOARD_XTEINK_X4) && !defined(X4_WAKE_ON_BUTTON)
   // Same timed wake as 1.8.17, with the panel, SD card, and ADC pins parked first.
   x4_prepare_timed_sleep();
+  // GPIO3 is the power button. Sleep wakes if that pin is low. Parking the
+  // page-button pins can leave it low, and a low pin aborts sleep at once.
+  // The blank loading screen then runs and the day is downloaded again.
+  esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_GPIO);
+  pinMode(pDevice->interrupt_pin, INPUT_PULLUP);
+  delay(20);
+  if (digitalRead(pDevice->interrupt_pin) == HIGH) {
+    esp_deep_sleep_enable_gpio_wakeup(1ULL << pDevice->interrupt_pin, ESP_GPIO_WAKEUP_GPIO_LOW);
+  } else {
+    Log_info("Power button line is low; sleeping on the timer only");
+  }
 #elif defined(BOARD_XTEINK_X4) || defined(BOARD_XTEINK_X3)
 #ifdef X4_WAKE_ON_BUTTON
   pinMode(13, OUTPUT);
