@@ -2321,7 +2321,7 @@ void goToSleep(void)
   #define BUTTON_PIN_BITMASK(GPIO) (1ULL << GPIO)  // 2 ^ GPIO_NUMBER in hex
   esp_sleep_enable_ext1_wakeup(BUTTON_PIN_BITMASK(pDevice->interrupt_pin), ESP_EXT1_WAKEUP_ALL_LOW);
 #elif defined(CONFIG_IDF_TARGET_ESP32C3) || defined (CONFIG_IDF_TARGET_ESP32C5)
-#if defined(BOARD_XTEINK_X4) && !defined(X4_WAKE_ON_BUTTON)
+#if defined(BOARD_XTEINK_X4) && !defined(X4_WAKE_ON_BUTTON) && !defined(X4_STOCK_POWER)
   // Hourly sleep only. Waking on the power button was restarting the refresh immediately.
 #else
   pinMode(pDevice->interrupt_pin, INPUT); // needed to not immediately wake up
@@ -2336,7 +2336,7 @@ void goToSleep(void)
 #else
 #error "Unsupported ESP32 target for GPIO wakeup configuration"
 #endif
-#if defined(BOARD_XTEINK_X4) && !defined(X4_WAKE_ON_BUTTON)
+#if defined(BOARD_XTEINK_X4) && !defined(X4_WAKE_ON_BUTTON) && !defined(X4_STOCK_POWER)
   // Same timed wake as 1.8.17, with the panel, SD card, and ADC pins parked first.
   x4_prepare_timed_sleep();
   gpio_wakeup_disable((gpio_num_t)pDevice->interrupt_pin);
