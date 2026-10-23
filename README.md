@@ -12,6 +12,8 @@ After Wi-Fi, the reader calls that website by itself. You do not open Advanced s
 
 If a later wake cannot join Wi-Fi, the picture already on the screen stays. The reader tries again later. Before any day or setup code has been drawn, a failed connection still shows the connection message.
 
+To join a different network, hold the power button for about 5 seconds. The reader forgets the saved network and shows the setup screen. Join the Wi-Fi network whose name starts with TRMNL, then pick the new network.
+
 Leave the Erase box empty when you flash. Empty keeps the Wi-Fi network and any server address already saved on the reader. A reader that already reaches its server keeps doing that. This build uses the calendar website only when the reader has no saved server address.
 
 Advanced settings are still on the Wi-Fi page for a different server, a fixed IP address, or a reset. Leave the server field empty unless you run your own server.
