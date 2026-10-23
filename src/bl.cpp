@@ -2309,8 +2309,9 @@ void goToSleep(void)
 
   filesystem_deinit();
   uint32_t time_to_sleep = refreshInterval.seconds();
+  if (time_to_sleep == 0) time_to_sleep = 3600;
   iPrevWakeTime = millis() - startup_time; // save for statistics
-  Log.info("%s [%d]: total awake time - %d ms\r\n", __FILE__, __LINE__, iPrevWakeTime); 
+  Log.info("%s [%d]: total awake time - %d ms\r\n", __FILE__, __LINE__, iPrevWakeTime);
   Log.info("%s [%d]: time to sleep - %d\r\n", __FILE__, __LINE__, time_to_sleep);
   preferences.putUInt(PREFERENCES_LAST_SLEEP_TIME, systemClock().getTime());
   preferences.end();
@@ -2320,8 +2321,12 @@ void goToSleep(void)
   #define BUTTON_PIN_BITMASK(GPIO) (1ULL << GPIO)  // 2 ^ GPIO_NUMBER in hex
   esp_sleep_enable_ext1_wakeup(BUTTON_PIN_BITMASK(pDevice->interrupt_pin), ESP_EXT1_WAKEUP_ALL_LOW);
 #elif defined(CONFIG_IDF_TARGET_ESP32C3) || defined (CONFIG_IDF_TARGET_ESP32C5)
+#if defined(BOARD_XTEINK_X4) && !defined(X4_WAKE_ON_BUTTON)
+  // Hourly sleep only. Waking on the power button was restarting the refresh immediately.
+#else
   pinMode(pDevice->interrupt_pin, INPUT); // needed to not immediately wake up
   esp_deep_sleep_enable_gpio_wakeup(1 << pDevice->interrupt_pin, ESP_GPIO_WAKEUP_GPIO_LOW);
+#endif
 #elif defined(CONFIG_IDF_TARGET_ESP32S3)
 #ifdef BOARD_TRMNL_X
   esp_sleep_enable_ext0_wakeup((gpio_num_t)PIN_INTERRUPT, 0);
@@ -2334,17 +2339,8 @@ void goToSleep(void)
 #if defined(BOARD_XTEINK_X4) && !defined(X4_WAKE_ON_BUTTON)
   // Same timed wake as 1.8.17, with the panel, SD card, and ADC pins parked first.
   x4_prepare_timed_sleep();
-  // GPIO3 is the power button. Sleep wakes if that pin is low. Parking the
-  // page-button pins can leave it low, and a low pin aborts sleep at once.
-  // The blank loading screen then runs and the day is downloaded again.
+  gpio_wakeup_disable((gpio_num_t)pDevice->interrupt_pin);
   esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_GPIO);
-  pinMode(pDevice->interrupt_pin, INPUT_PULLUP);
-  delay(20);
-  if (digitalRead(pDevice->interrupt_pin) == HIGH) {
-    esp_deep_sleep_enable_gpio_wakeup(1ULL << pDevice->interrupt_pin, ESP_GPIO_WAKEUP_GPIO_LOW);
-  } else {
-    Log_info("Power button line is low; sleeping on the timer only");
-  }
 #elif defined(BOARD_XTEINK_X4) || defined(BOARD_XTEINK_X3)
 #ifdef X4_WAKE_ON_BUTTON
   pinMode(13, OUTPUT);
